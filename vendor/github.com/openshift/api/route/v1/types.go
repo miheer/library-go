@@ -47,6 +47,7 @@ type Route struct {
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
 	// spec is the desired state of the route
+	// +kubebuilder:validation:XValidation:rule="!has(self.tls) || self.tls.termination != 'passthrough' || !has(self.httpHeaders)",message="header actions are not permitted when tls termination is passthrough."
 	Spec RouteSpec `json:"spec" protobuf:"bytes,2,opt,name=spec"`
 	// status is the current state of the route
 	// +optional
@@ -145,7 +146,147 @@ type RouteSpec struct {
 	// +kubebuilder:validation:Enum=None;Subdomain;""
 	// +kubebuilder:default=None
 	WildcardPolicy WildcardPolicyType `json:"wildcardPolicy,omitempty" protobuf:"bytes,7,opt,name=wildcardPolicy"`
+
+	// httpHeaders defines policy for HTTP headers.
+	//
+	// If this field is empty, the default values are used.
+	//
+	// +optional
+	HTTPHeaders *RouteHTTPHeaders `json:"httpHeaders,omitempty" protobuf:"bytes,9,opt,name=httpHeaders"`
 }
+
+// RouteHTTPHeaders defines policy for HTTP headers.
+type RouteHTTPHeaders struct {
+	// actions specifies actions to take on headers.
+	// Note that this option only applies to cleartext HTTP connections
+	// and to secure HTTP connections for which the ingress controller
+	// terminates encryption (that is, edge-terminated or reencrypt
+	// connections).  Headers cannot be set or deleted for TLS passthrough
+	// connections.
+	// Setting HSTS header is supported via another mechanism in Ingress.Spec.RequiredHSTSPolicies.
+	// Any header configuration applied directly via a Route resource using this API
+	//  will override header configuration for a header of the same name applied via
+	// spec.httpHeaders.actions on the IngressController or route annotation.
+	// The headers set via this API will not appear in access logs.  In
+	// addition, any headers set via this API on the route will overwrite
+	// headers set via spec.clientTLS,spec.httpHeaders.forwardedHeaderPolicy,
+	// spec.httpHeaders.uniqueId, and spec.httpHeaders.headerNameCaseAdjustments IngressController
+	// options.
+	// Setting "cookie" or "set-cookie" headers that conflict with OpenShift router's session cookies will result in undefined behavior.
+	// Note that the total size of all added headers *after* interpolating dynamic values
+	// must not exceed the value of spec.tuningOptions.headerBufferMaxRewriteBytes on the
+	// IngressController.
+	// +optional
+	Actions RouteHTTPHeaderActions `json:"actions,omitempty" protobuf:"bytes,1,opt,name=actions"`
+}
+
+// RouteHTTPHeaderActions defines configuration for actions on HTTP request and response headers.
+type RouteHTTPHeaderActions struct {
+	// response is a list of HTTP response headers to set or delete.
+	// The actions either Set or Delete will be performed on the headers in sequence as defined in the list of response headers.
+	// A maximum of 20 response header actions may be configured.
+	// You can use this field to specify HTTP response headers that should be set or deleted
+	// when forwarding responses from your application to the client.
+	// Sample fetchers allowed are "req.hdr" and "ssl_c_der".
+	// Converters allowed are "lower" and "base64".
+	// Example header values: "%[res.hdr(X-target),lower]", "%{+Q}[ssl_c_der,base64]".
+	// Note: This field cannot be used if your route uses TLS passthrough.
+	// + ---
+	// + Note: Any change to regex mentioned below must be reflected in the CRD validation of route in https://github.com/openshift/library-go/blob/master/pkg/route/validation/validation.go and vice-versa.
+	// +listType=map
+	// +listMapKey=name
+	// +optional
+	// +kubebuilder:validation:MaxItems=20
+	// +kubebuilder:validation:XValidation:rule=`self.all(key, key.action.type == "Delete" || (has(key.action.set) && key.action.set.value.matches('^(?:%(?:%|(?:\\{[-+]?[QXE](?:,[-+]?[QXE])*\\})?\\[(?:res\\.hdr\\([0-9A-Za-z-]+\\)|ssl_c_der)(?:,(?:lower|base64))*\\])|[^%[:cntrl:]])+$')))`,message="Either the header value provided is not in correct format or the sample fetcher/converter specified is not allowed. The dynamic header value will be interpreted as an HAProxy format string as defined in https://cbonte.github.io/haproxy-dconv/2.4/configuration.html#8.2.4 and may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2. Sample fetchers allowed are res.hdr, ssl_c_der. Converters allowed are lower, base64."
+	Response []RouteHTTPHeader `json:"response" protobuf:"bytes,1,rep,name=response"`
+	// request is a list of HTTP request headers to set or delete.
+	// The actions either Set or Delete will be performed on the headers in sequence as defined in the list of request headers.
+	// A maximum of 20 request header actions may be configured.
+	// You can use this field to specify HTTP request headers that should be set or deleted
+	// when forwarding connections from the client to your application.
+	// Sample fetchers allowed are "req.hdr" and "ssl_c_der".
+	// Converters allowed are "lower" and "base64".
+	// Example header values: "%[req.hdr(X-target),lower]", "%{+Q}[ssl_c_der,base64]".
+	// Note: This field cannot be used if your route uses TLS passthrough.
+	// + ---
+	// + Note: Any change to regex mentioned below must be reflected in the CRD validation of route in https://github.com/openshift/library-go/blob/master/pkg/route/validation/validation.go and vice-versa.
+	// +listType=map
+	// +listMapKey=name
+	// +optional
+	// +kubebuilder:validation:MaxItems=20
+	// +kubebuilder:validation:XValidation:rule=`self.all(key, key.action.type == "Delete" || (has(key.action.set) && key.action.set.value.matches('^(?:%(?:%|(?:\\{[-+]?[QXE](?:,[-+]?[QXE])*\\})?\\[(?:req\\.hdr\\([0-9A-Za-z-]+\\)|ssl_c_der)(?:,(?:lower|base64))*\\])|[^%[:cntrl:]])+$')))`,message="Either the header value provided is not in correct format or the sample fetcher/converter specified is not allowed. The dynamic header value will be interpreted as an HAProxy format string as defined in https://cbonte.github.io/haproxy-dconv/2.4/configuration.html#8.2.4 and may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2. Sample fetchers allowed are req.hdr, ssl_c_der. Converters allowed are lower, base64."
+	Request []RouteHTTPHeader `json:"request" protobuf:"bytes,2,rep,name=request"`
+}
+
+// RouteHTTPHeader specifies configuration for setting or deleting an HTTP header.
+type RouteHTTPHeader struct {
+	// name specifies a header name to be set or delete. Its value must be a valid HTTP header
+	// name as defined in RFC 2616 section 4.2.
+	// The name must consist only of alphanumeric and the following special characters, `-!#$%&'*+.^_``.
+	// It must be no more than 1024 characters in length.
+	// A max length of 1024 characters was selected arbitrarily.
+	// Header name must be unique.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=1024
+	// +kubebuilder:validation:Pattern="^[-!#$%&'*+.0-9A-Z^_`a-z|~]+$"
+	// +kubebuilder:validation:XValidation:rule="self.lowerAscii() != 'strict-transport-security'",message="strict-transport-security header may not be set or deleted via header actions"
+	// +kubebuilder:validation:XValidation:rule="self.lowerAscii() != 'proxy'",message="proxy header may not be set or deleted via header actions"
+	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
+
+	// action specifies actions to perform on headers, such as setting or deleting headers.
+	// +kubebuilder:validation:Required
+	Action RouteHTTPHeaderActionUnion `json:"action" protobuf:"bytes,2,opt,name=action"`
+}
+
+// RouteHTTPHeaderActionUnion specifies an action to take on an HTTP header.
+// +kubebuilder:validation:XValidation:rule="has(self.type) && self.type == 'Set' ?  has(self.set) : !has(self.set)",message="set is required when type is Set, and forbidden otherwise"
+// +union
+type RouteHTTPHeaderActionUnion struct {
+	// type defines the type of the action to be applied on the header.
+	// Possible values are Set or Delete.
+	// Set allows you to set HTTP request and response headers.
+	// Delete allows you to delete HTTP request and response headers.
+	// +unionDiscriminator
+	// +kubebuilder:validation:Enum:=Set;Delete
+	// +kubebuilder:validation:Required
+	Type RouteHTTPHeaderActionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=RouteHTTPHeaderActionType"`
+
+	// set defines the HTTP header that should be set: added if it doesn't exist or replaced if it does.
+	// If this field is empty, no header is added or replaced.
+	// +optional
+	// +unionMember
+	Set *RouteSetHTTPHeader `json:"set,omitempty" protobuf:"bytes,2,opt,name=set"`
+}
+
+// RouteSetHTTPHeader specifies what value needs to be set on an HTTP header.
+type RouteSetHTTPHeader struct {
+	// value specifies a header value.
+	// Dynamic values can be added. The value will be interpreted as an HAProxy format string as defined in
+	// https://cbonte.github.io/haproxy-dconv/2.4/configuration.html#8.2.4 and may use HAProxy's %[] syntax and
+	// otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.
+	// The value of this field must be no more than 16384 characters in length.
+	// This limit was selected as most common web servers have a limit of 16384 characters
+	// or some lower limit.
+	//
+	// Note that the total size of all added headers *after* interpolating dynamic values
+	// must not exceed the value of spec.tuningOptions.headerBufferMaxRewriteBytes on the
+	// IngressController.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=16384
+	Value string `json:"value" protobuf:"bytes,1,opt,name=value"`
+}
+
+// RouteHTTPHeaderActionType defines actions that can be performed on HTTP headers.
+type RouteHTTPHeaderActionType string
+
+const (
+	// Set specifies that an HTTP header should be set.
+	Set RouteHTTPHeaderActionType = "Set"
+	// Delete specifies that an HTTP header should be deleted.
+	Delete RouteHTTPHeaderActionType = "Delete"
+)
 
 // RouteTargetReference specifies the target that resolve into endpoints. Only the 'Service'
 // kind is allowed. Use 'weight' field to emphasize one over others.
@@ -248,6 +389,7 @@ type RouterShard struct {
 // TLSConfig defines config used to secure a route and provide termination
 //
 // +kubebuilder:validation:XValidation:rule="has(self.termination) && has(self.insecureEdgeTerminationPolicy) ? !((self.termination=='passthrough') && (self.insecureEdgeTerminationPolicy=='Allow')) : true", message="cannot have both spec.tls.termination: passthrough and spec.tls.insecureEdgeTerminationPolicy: Allow"
+// +openshift:validation:FeatureSetAwareXValidation:featureSet=TechPreviewNoUpgrade;CustomNoUpgrade,rule="!(has(self.certificate) && has(self.externalCertificate))", message="cannot have both spec.tls.certificate and spec.tls.externalCertificate"
 type TLSConfig struct {
 	// termination indicates termination type.
 	//
@@ -284,6 +426,26 @@ type TLSConfig struct {
 	//
 	// +kubebuilder:validation:Enum=Allow;None;Redirect;""
 	InsecureEdgeTerminationPolicy InsecureEdgeTerminationPolicyType `json:"insecureEdgeTerminationPolicy,omitempty" protobuf:"bytes,6,opt,name=insecureEdgeTerminationPolicy,casttype=InsecureEdgeTerminationPolicyType"`
+
+	// externalCertificate provides certificate contents as a secret reference.
+	// This should be a single serving certificate, not a certificate
+	// chain. Do not include a CA certificate. The secret referenced should
+	// be present in the same namespace as that of the Route.
+	// Forbidden when `certificate` is set.
+	//
+	// +openshift:enable:FeatureSets=CustomNoUpgrade;TechPreviewNoUpgrade
+	// +optional
+	ExternalCertificate *LocalObjectReference `json:"externalCertificate,omitempty" protobuf:"bytes,7,opt,name=externalCertificate"`
+}
+
+// LocalObjectReference contains enough information to let you locate the
+// referenced object inside the same namespace.
+// +structType=atomic
+type LocalObjectReference struct {
+	// name of the referent.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+	// +optional
+	Name string `json:"name,omitempty" protobuf:"bytes,1,opt,name=name"`
 }
 
 // TLSTerminationType dictates where the secure communication will stop

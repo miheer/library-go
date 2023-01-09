@@ -832,7 +832,7 @@ func (IngressControllerCaptureHTTPCookieUnion) SwaggerDoc() map[string]string {
 
 var map_IngressControllerCaptureHTTPHeader = map[string]string{
 	"":          "IngressControllerCaptureHTTPHeader describes an HTTP header that should be captured.",
-	"name":      "name specifies a header name.  Its value must be a valid HTTP header name as defined in RFC 2616 section 4.2.",
+	"name":      "name specifies a header name to be set or delete. Its value must be a valid HTTP header name as defined in RFC 2616 section 4.2.",
 	"maxLength": "maxLength specifies a maximum length for the header value.  If a header value exceeds this length, the value will be truncated in the log message.  Note that the ingress controller may impose a separate bound on the total length of HTTP headers in a request.",
 }
 
@@ -850,11 +850,42 @@ func (IngressControllerCaptureHTTPHeaders) SwaggerDoc() map[string]string {
 	return map_IngressControllerCaptureHTTPHeaders
 }
 
+var map_IngressControllerHTTPHeader = map[string]string{
+	"":       "IngressControllerHTTPHeader specifies configuration for setting or deleting an HTTP header.",
+	"name":   "name specifies the name of a header to set or delete.  Its value must be a valid HTTP header name as defined in RFC 2616 section 4.2. The name must consist only of alphanumeric and the following special characters, `-!#$%&'*+.^_``. It must be no more than 1024 characters in length. A max length of 1024 characters was selected arbitrarily. Header name must be unique.",
+	"action": "action specifies actions to perform on headers, such as setting or deleting headers.",
+}
+
+func (IngressControllerHTTPHeader) SwaggerDoc() map[string]string {
+	return map_IngressControllerHTTPHeader
+}
+
+var map_IngressControllerHTTPHeaderActionUnion = map[string]string{
+	"":     "IngressControllerHTTPHeaderActionUnion specifies an action to take on an HTTP header.",
+	"type": "type defines the type of the action to be applied on the header. Possible values are Set or Delete. Set allows you to set HTTP request and response headers. Delete allows you to delete HTTP request and response headers.",
+	"set":  "set specifies how the HTTP header should be set. If this field is empty, no action is taken.",
+}
+
+func (IngressControllerHTTPHeaderActionUnion) SwaggerDoc() map[string]string {
+	return map_IngressControllerHTTPHeaderActionUnion
+}
+
+var map_IngressControllerHTTPHeaderActions = map[string]string{
+	"":         "IngressControllerHTTPHeaderActions defines configuration for actions on HTTP request and response headers.",
+	"response": "response is a list of HTTP response headers to set or delete. The cluster administrator uses these to specify HTTP response headers that should be set or deleted at the global level when forwarding responses from an application to the client, i.e. for all routes. The actions either Set or Delete will be performed on the headers in sequence as defined in the list of response headers. A maximum of 20 response header actions may be configured. Sample fetchers allowed are \"res.hdr\" and \"ssl_c_der\". Converters allowed are \"lower\" and \"base64\". Example header values: \"%[res.hdr(X-target),lower]\", \"%{+Q}[ssl_c_der,base64]\". ",
+	"request":  "request is a list of HTTP request headers to set or delete. The cluster administrator uses these to specify HTTP request headers that should be set or deleted at the global level when forwarding requests to your application from the client, i.e. for all routes. The actions either Set or Delete will be performed on the headers in sequence as defined in the list of request headers. A maximum of 20 request header actions may be configured. Sample fetchers allowed are \"req.hdr\" and \"ssl_c_der\". Converters allowed are \"lower\" and \"base64\". Example header values: \"%[req.hdr(X-target),lower]\", \"%{+Q}[ssl_c_der,base64]\". ",
+}
+
+func (IngressControllerHTTPHeaderActions) SwaggerDoc() map[string]string {
+	return map_IngressControllerHTTPHeaderActions
+}
+
 var map_IngressControllerHTTPHeaders = map[string]string{
 	"":                          "IngressControllerHTTPHeaders specifies how the IngressController handles certain HTTP headers.",
 	"forwardedHeaderPolicy":     "forwardedHeaderPolicy specifies when and how the IngressController sets the Forwarded, X-Forwarded-For, X-Forwarded-Host, X-Forwarded-Port, X-Forwarded-Proto, and X-Forwarded-Proto-Version HTTP headers.  The value may be one of the following:\n\n* \"Append\", which specifies that the IngressController appends the\n  headers, preserving existing headers.\n\n* \"Replace\", which specifies that the IngressController sets the\n  headers, replacing any existing Forwarded or X-Forwarded-* headers.\n\n* \"IfNone\", which specifies that the IngressController sets the\n  headers if they are not already set.\n\n* \"Never\", which specifies that the IngressController never sets the\n  headers, preserving any existing headers.\n\nBy default, the policy is \"Append\".",
 	"uniqueId":                  "uniqueId describes configuration for a custom HTTP header that the ingress controller should inject into incoming HTTP requests. Typically, this header is configured to have a value that is unique to the HTTP request.  The header can be used by applications or included in access logs to facilitate tracing individual HTTP requests.\n\nIf this field is empty, no such header is injected into requests.",
 	"headerNameCaseAdjustments": "headerNameCaseAdjustments specifies case adjustments that can be applied to HTTP header names.  Each adjustment is specified as an HTTP header name with the desired capitalization.  For example, specifying \"X-Forwarded-For\" indicates that the \"x-forwarded-for\" HTTP header should be adjusted to have the specified capitalization.\n\nThese adjustments are only applied to cleartext, edge-terminated, and re-encrypt routes, and only when using HTTP/1.\n\nFor request headers, these adjustments are applied only for routes that have the haproxy.router.openshift.io/h1-adjust-case=true annotation.  For response headers, these adjustments are applied to all HTTP responses.\n\nIf this field is empty, no request headers are adjusted.",
+	"actions":                   "actions specifies options for performing action on headers. Note that this option only applies to cleartext HTTP connections and to secure HTTP connections for which the ingress controller terminates encryption (that is, edge-terminated or reencrypt connections).  Headers cannot be set or deleted for TLS passthrough connections. Setting HSTS header is supported via another mechanism in Ingress.Spec.RequiredHSTSPolicies. The header settings made here can replace settings made in: cache-control, spec.clientTLS, spec.httpHeaders.forwardedHeaderPolicy, spec.httpHeaders.uniqueId, and spec.httpHeaders.headerNameCaseAdjustments. The header settings made here can be overwritten by spec.httpHeaders or annotations on Route objects. Setting httpCaptureHeaders for the headers set via this API will not work. Setting \"cookie\" or \"set-cookie\" headers that conflict with OpenShift router's session cookies will result in undefined behavior. Note that the total size of all added headers *after* interpolating dynamic values must not exceed the value of spec.tuningOptions.headerBufferMaxRewriteBytes on the IngressController.",
 }
 
 func (IngressControllerHTTPHeaders) SwaggerDoc() map[string]string {
@@ -887,6 +918,15 @@ var map_IngressControllerLogging = map[string]string{
 
 func (IngressControllerLogging) SwaggerDoc() map[string]string {
 	return map_IngressControllerLogging
+}
+
+var map_IngressControllerSetHTTPHeader = map[string]string{
+	"":      "IngressControllerSetHTTPHeader defines the value which needs to be set on an HTTP header.",
+	"value": "value specifies a header value. Dynamic values can be added. The value will be interpreted as an HAProxy format string as defined in https://cbonte.github.io/haproxy-dconv/2.4/configuration.html#8.2.4 and may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2. The value of this field must be no more than 16384 characters in length. This limit was selected as most common web servers have a limit of 16384 characters or some lower limit.\n\nNote that the total size of all added headers *after* interpolating dynamic values must not exceed the value of spec.tuningOptions.headerBufferMaxRewriteBytes on the IngressController.",
+}
+
+func (IngressControllerSetHTTPHeader) SwaggerDoc() map[string]string {
+	return map_IngressControllerSetHTTPHeader
 }
 
 var map_IngressControllerSpec = map[string]string{
@@ -1427,7 +1467,7 @@ func (OpenShiftSDNConfig) SwaggerDoc() map[string]string {
 var map_PolicyAuditConfig = map[string]string{
 	"rateLimit":      "rateLimit is the approximate maximum number of messages to generate per-second per-node. If unset the default of 20 msg/sec is used.",
 	"maxFileSize":    "maxFilesSize is the max size an ACL_audit log file is allowed to reach before rotation occurs Units are in MB and the Default is 50MB",
-	"maxLogFiles":    "maxLogFiles specifies the maximum number of ACL_audit log files that can be present. Default: 5",
+	"maxLogFiles":    "maxLogFiles specifies the maximum number of ACL_audit log files that can be present.",
 	"destination":    "destination is the location for policy log messages. Regardless of this config, persistent logs will always be dumped to the host at /var/log/ovn/ however Additionally syslog output may be configured as follows. Valid values are: - \"libc\" -> to use the libc syslog() function of the host node's journdald process - \"udp:host:port\" -> for sending syslog over UDP - \"unix:file\" -> for using the UNIX domain socket directly - \"null\" -> to discard all messages logged to syslog The default is \"null\"",
 	"syslogFacility": "syslogFacility the RFC5424 facility for generated messages, e.g. \"kern\". Default is \"local0\"",
 }
