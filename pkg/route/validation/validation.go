@@ -413,7 +413,7 @@ func validateHeaders(fldPath *field.Path, headers []routev1.RouteHTTPHeader, val
 			allErrs = append(allErrs, err)
 		}
 
-		if header.Action.Type == routev1.Set && header.Action.Set == nil {
+		if header.Action.Type == routev1.Set && header.Action.Set == nil || header.Action.Type != routev1.Set && header.Action.Set != nil {
 			err := field.Required(idxPath.Child("action", "set"), "set is required when type is Set, and forbidden otherwise")
 			allErrs = append(allErrs, err)
 		}
