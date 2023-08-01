@@ -856,7 +856,6 @@ func TestValidateRoute(t *testing.T) {
 						Termination: routev1.TLSTerminationPassthrough,
 					},
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
@@ -899,7 +898,6 @@ func TestValidateRoute(t *testing.T) {
 						Termination: routev1.TLSTerminationPassthrough,
 					},
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Request: []routev1.RouteHTTPHeader{
 								{
@@ -912,7 +910,6 @@ func TestValidateRoute(t *testing.T) {
 									},
 								},
 								{
-
 									Name: "Accept-Encoding",
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Delete,
@@ -983,17 +980,14 @@ func TestValidateRoute(t *testing.T) {
 
 // This unit test tests if the Actions to set/delete headers were passed correctly in the Route Spec and checks if an appropriate error message was provided.
 func TestValidateHeaders(t *testing.T) {
-	var headerNameXFrame = "X-Frame-Options"
-	var headerNameXSS = "X-XSS-Protection"
-	var headerNameHSTS = "Strict-Transport-Security"
-	var headerNameProxy = "Proxy"
-	var headerNameCookie = "Cookie"
-	var headerNameSetCookie = "Set-Cookie"
+	var (
+		tooLargeName  = strings.Repeat("x", 1025)
+		tooLargeValue = strings.Repeat("y", 16385)
+	)
 	tests := []struct {
 		name                 string
 		route                *routev1.Route
 		expectedErrorMessage string
-		headerType           string
 	}{
 		{
 			name: "Should give an error on attempt to delete the HSTS header.",
@@ -1007,12 +1001,10 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
-
-									Name: headerNameHSTS,
+									Name: "Strict-Transport-Security",
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Delete,
 									},
@@ -1022,8 +1014,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.response[0].name: Unsupported value: \"Strict-Transport-Security\": supported values: \"All headers except strict-transport-security,proxy,cookie,set-cookie\"",
-			headerType:           "response",
+			expectedErrorMessage: "spec.httpHeaders.actions.response[0].name: Forbidden: the following headers may not be modified using this API: strict-transport-security, proxy, cookie, set-cookie",
 		},
 		{
 			name: "Should give an error on attempt to delete the Proxy header.",
@@ -1037,12 +1028,10 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
-
-									Name: headerNameProxy,
+									Name: "Proxy",
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Delete,
 									},
@@ -1052,8 +1041,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.response[0].name: Unsupported value: \"Proxy\": supported values: \"All headers except strict-transport-security,proxy,cookie,set-cookie\"",
-			headerType:           "response",
+			expectedErrorMessage: "spec.httpHeaders.actions.response[0].name: Forbidden: the following headers may not be modified using this API: strict-transport-security, proxy, cookie, set-cookie",
 		},
 		{
 			name: "Should give an error on attempt to delete the Cookie header.",
@@ -1067,12 +1055,10 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Request: []routev1.RouteHTTPHeader{
 								{
-
-									Name: headerNameCookie,
+									Name: "Cookie",
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Delete,
 									},
@@ -1082,8 +1068,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.request[0].name: Unsupported value: \"Cookie\": supported values: \"All headers except strict-transport-security,proxy,cookie,set-cookie\"",
-			headerType:           "request",
+			expectedErrorMessage: "spec.httpHeaders.actions.request[0].name: Forbidden: the following headers may not be modified using this API: strict-transport-security, proxy, cookie, set-cookie",
 		},
 		{
 			name: "Should give an error on attempt to delete the Set-Cookie header.",
@@ -1097,12 +1082,10 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
-
-									Name: headerNameSetCookie,
+									Name: "Set-Cookie",
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Delete,
 									},
@@ -1112,8 +1095,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.response[0].name: Unsupported value: \"Set-Cookie\": supported values: \"All headers except strict-transport-security,proxy,cookie,set-cookie\"",
-			headerType:           "response",
+			expectedErrorMessage: "spec.httpHeaders.actions.response[0].name: Forbidden: the following headers may not be modified using this API: strict-transport-security, proxy, cookie, set-cookie",
 		},
 		{
 			name: "Should give an error when brackets are not closed properly.",
@@ -1127,7 +1109,6 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
@@ -1144,8 +1125,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.response[0].action.set.value: Invalid value: \"expires\": Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are res.hdr, ssl_c_der. Converters allowed are lower, base64.",
-			headerType:           "response",
+			expectedErrorMessage: `spec.httpHeaders.actions.response[0].action.set.value: Invalid value: "%{+Q}[ssl_c_der,base64": Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are res.hdr, ssl_c_der. Converters allowed are lower, base64.`,
 		},
 		{
 			name: "Should give an error if the converter in dynamic header value is not permitted.",
@@ -1159,7 +1139,6 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
@@ -1176,8 +1155,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.response[0].action.set.value: Invalid value: \"map\": Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are res.hdr, ssl_c_der. Converters allowed are lower, base64.",
-			headerType:           "response",
+			expectedErrorMessage: `spec.httpHeaders.actions.response[0].action.set.value: Invalid value: "%[res.hdr(host),bogus]": Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are res.hdr, ssl_c_der. Converters allowed are lower, base64.`,
 		},
 		{
 			name: "Valid response headers",
@@ -1191,11 +1169,10 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
-									Name: headerNameXFrame,
+									Name: "X-Frame-Options",
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Set,
 										Set: &routev1.RouteSetHTTPHeader{
@@ -1204,19 +1181,18 @@ func TestValidateHeaders(t *testing.T) {
 									},
 								},
 								{
-									Name: headerNameXSS,
-									Action: routev1.RouteHTTPHeaderActionUnion{
-										Type: routev1.Set,
-										Set: &routev1.RouteSetHTTPHeader{
-											Value: "1;mode=block",
-										},
-									},
-								},
-								{
-
 									Name: "X-Server",
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Delete,
+									},
+								},
+								{
+									Name: "X-Frame-Options",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "SAMEORIGIN",
+										},
 									},
 								},
 							},
@@ -1224,8 +1200,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.response[2].name: Invalid value: \"X-XSS-Protection\": duplicate header name not allowed",
-			headerType:           "response",
+			expectedErrorMessage: `spec.httpHeaders.actions.response[2].name: Duplicate value: "X-Frame-Options"`,
 		},
 		{
 			name: "Valid request headers",
@@ -1239,7 +1214,6 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Request: []routev1.RouteHTTPHeader{
 								{
@@ -1252,7 +1226,6 @@ func TestValidateHeaders(t *testing.T) {
 									},
 								},
 								{
-
 									Name: "Accept-Encoding",
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Delete,
@@ -1282,7 +1255,146 @@ func TestValidateHeaders(t *testing.T) {
 				},
 			},
 			expectedErrorMessage: "",
-			headerType:           "request",
+		},
+		{
+			name: "Valid request and response headers",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "valid-request-and-response-headers",
+					Namespace: "foo",
+				},
+				Spec: routev1.RouteSpec{
+					Host: "subdomain.example.test",
+					To:   createRouteSpecTo("serviceName", "Service"),
+					HTTPHeaders: &routev1.RouteHTTPHeaders{
+						Actions: routev1.RouteHTTPHeaderActions{
+							Request: []routev1.RouteHTTPHeader{
+								{
+									Name: "x-foo",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "%{+Q}[ssl_c_der,base64]",
+										},
+									},
+								},
+								{
+									Name: "x-bar",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Delete,
+									},
+								},
+								{
+									Name: "x-baz",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "%[req.hdr(Host),lower]",
+										},
+									},
+								},
+							},
+							Response: []routev1.RouteHTTPHeader{
+								{
+									Name: "x-foo",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "%{+Q}[ssl_c_der,base64]",
+										},
+									},
+								},
+								{
+									Name: "x-fooby",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Delete,
+									},
+								},
+								{
+									Name: "x-barby",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "%[res.hdr(server),lower]",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedErrorMessage: "",
+		},
+		{
+			name: "Invalid request and response headers",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "invalid-request-and-response-headers",
+					Namespace: "foo",
+				},
+				Spec: routev1.RouteSpec{
+					Host: "subdomain.example.test",
+					To:   createRouteSpecTo("serviceName", "Service"),
+					HTTPHeaders: &routev1.RouteHTTPHeaders{
+						Actions: routev1.RouteHTTPHeaderActions{
+							Request: []routev1.RouteHTTPHeader{
+								{
+									Name: "x-foo",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "%+Q[ssl_c_der,base64]",
+										},
+									},
+								},
+								{
+									Name: "x-bar",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Delete,
+									},
+								},
+								{
+									Name: "x-baz",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "%[req.hdr(Host),lower",
+										},
+									},
+								},
+							},
+							Response: []routev1.RouteHTTPHeader{
+								{
+									Name: "x-foo",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "%{+Q}[ssl_c_der,base64]",
+										},
+									},
+								},
+								{
+									Name: "x-fooby",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Delete,
+									},
+								},
+								{
+									Name: "x-barby",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "%[res.hdr(server),tolower]",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedErrorMessage: `[spec.httpHeaders.actions.response[2].action.set.value: Invalid value: "%[res.hdr(server),tolower]": Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are res.hdr, ssl_c_der. Converters allowed are lower, base64., spec.httpHeaders.actions.request[0].action.set.value: Invalid value: "%+Q[ssl_c_der,base64]": Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are req.hdr, ssl_c_der. Converters allowed are lower, base64., spec.httpHeaders.actions.request[2].action.set.value: Invalid value: "%[req.hdr(Host),lower": Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are req.hdr, ssl_c_der. Converters allowed are lower, base64.]`,
 		},
 		{
 			name: "Should give an error if the header value exceeds 16384 chars",
@@ -1296,7 +1408,6 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
@@ -1304,7 +1415,7 @@ func TestValidateHeaders(t *testing.T) {
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Set,
 										Set: &routev1.RouteSetHTTPHeader{
-											Value: string(make([]byte, 16385)),
+											Value: tooLargeValue,
 										},
 									},
 								},
@@ -1313,7 +1424,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: fmt.Sprintf("spec.httpHeaders.actions.response[0].action.set.value: Invalid value: %v: value exceeds the maximum length which is 16384", fmt.Sprint(string(make([]byte, 16385)))),
+			expectedErrorMessage: fmt.Sprintf("spec.httpHeaders.actions.response[0].action.set.value: Invalid value: %q: value exceeds the maximum length, which is 16384", tooLargeValue),
 		},
 		{
 			name: "Should give an error if the header value is 0 chars",
@@ -1327,7 +1438,6 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
@@ -1335,7 +1445,7 @@ func TestValidateHeaders(t *testing.T) {
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Set,
 										Set: &routev1.RouteSetHTTPHeader{
-											Value: string(make([]byte, 0)),
+											Value: "",
 										},
 									},
 								},
@@ -1344,8 +1454,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.response[0].action.set.value: Invalid value: \"\": value must be present",
-			headerType:           "response",
+			expectedErrorMessage: "spec.httpHeaders.actions.response[0].action.set.value: Required value",
 		},
 		{
 			name: "Should give an error if the header name exceeds 1024 chars",
@@ -1359,15 +1468,14 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
-									Name: string(make([]byte, 1025)),
+									Name: tooLargeName,
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Set,
 										Set: &routev1.RouteSetHTTPHeader{
-											Value: string(make([]byte, 4095)),
+											Value: "foo",
 										},
 									},
 								},
@@ -1376,7 +1484,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: fmt.Sprintf("spec.httpHeaders.actions.response[0].name: Invalid value: %v: name exceeds the maximum length which is 1024", fmt.Sprint(string(make([]byte, 1025)))),
+			expectedErrorMessage: fmt.Sprintf("spec.httpHeaders.actions.response[0].name: Invalid value: %q: name exceeds the maximum length, which is 1024", tooLargeName),
 		},
 		{
 			name: "Should give an error if the header name is 0 chars",
@@ -1390,7 +1498,6 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
@@ -1398,7 +1505,7 @@ func TestValidateHeaders(t *testing.T) {
 									Action: routev1.RouteHTTPHeaderActionUnion{
 										Type: routev1.Set,
 										Set: &routev1.RouteSetHTTPHeader{
-											Value: string(make([]byte, 4095)),
+											Value: "foo",
 										},
 									},
 								},
@@ -1407,11 +1514,10 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.response[0].name: Invalid value: \"\": name must be present",
-			headerType:           "response",
+			expectedErrorMessage: "spec.httpHeaders.actions.response[0].name: Required value",
 		},
 		{
-			name: "Should give an error if the response header's value has sample converter req.hdr",
+			name: "Should give an error if the response header's value has sample fetcher req.hdr",
 			route: &routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "wildcardpolicy",
@@ -1422,7 +1528,6 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Response: []routev1.RouteHTTPHeader{
 								{
@@ -1439,7 +1544,37 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.response[0].action.set.value: Invalid value: \"X-SSL-Client-Cert\": Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are res.hdr, ssl_c_der. Converters allowed are lower, base64.",
+			expectedErrorMessage: `spec.httpHeaders.actions.response[0].action.set.value: Invalid value: "%[req.hdr(host),lower]": Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are res.hdr, ssl_c_der. Converters allowed are lower, base64.`,
+		},
+		{
+			name: "Should give an error if the request header's value has converter base_64",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "wildcardpolicy",
+					Namespace: "foo",
+				},
+				Spec: routev1.RouteSpec{
+					Host:           "subdomain.wildcard.test",
+					To:             createRouteSpecTo("serviceName", "Service"),
+					WildcardPolicy: routev1.WildcardPolicySubdomain,
+					HTTPHeaders: &routev1.RouteHTTPHeaders{
+						Actions: routev1.RouteHTTPHeaderActions{
+							Request: []routev1.RouteHTTPHeader{
+								{
+									Name: "X-SSL-Client-Cert",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "%[ssl_c_der,base_64]",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedErrorMessage: `spec.httpHeaders.actions.request[0].action.set.value: Invalid value: "%[ssl_c_der,base_64]": Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are req.hdr, ssl_c_der. Converters allowed are lower, base64.`,
 		},
 		{
 			name: "should not allow repetition of a header name",
@@ -1453,7 +1588,6 @@ func TestValidateHeaders(t *testing.T) {
 					To:             createRouteSpecTo("serviceName", "Service"),
 					WildcardPolicy: routev1.WildcardPolicySubdomain,
 					HTTPHeaders: &routev1.RouteHTTPHeaders{
-
 						Actions: routev1.RouteHTTPHeaderActions{
 							Request: []routev1.RouteHTTPHeader{
 								{
@@ -1476,23 +1610,27 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.request[1].name: Invalid value: \"Accept\": duplicate header name not allowed",
-			headerType:           "request",
+			expectedErrorMessage: `spec.httpHeaders.actions.request[1].name: Duplicate value: "Accept"`,
 		},
 	}
 	for _, tc := range tests {
-		var errorMessage *field.Error
-		switch tc.headerType {
-		case "response":
-			errorMessage = validateHeaders(field.NewPath(specResponseString), tc.route.Spec.HTTPHeaders.Actions.Response)
-		case "request":
-			errorMessage = validateHeaders(field.NewPath(specRequestString), tc.route.Spec.HTTPHeaders.Actions.Request)
-		}
-		if errorMessage != nil {
-			if errorMessage.Error() != tc.expectedErrorMessage {
-				t.Errorf("Test case %s expected %s but got %s", tc.name, tc.expectedErrorMessage, errorMessage)
+		t.Run(tc.name, func(t *testing.T) {
+			var allErrs field.ErrorList
+			allErrs = append(allErrs, validateHeaders(field.NewPath("spec", "httpHeaders", "actions", "response"), tc.route.Spec.HTTPHeaders.Actions.Response, permittedResponseHeaderValueRE, permittedResponseHeaderValueErrorMessage)...)
+			allErrs = append(allErrs, validateHeaders(field.NewPath("spec", "httpHeaders", "actions", "request"), tc.route.Spec.HTTPHeaders.Actions.Request, permittedRequestHeaderValueRE, permittedRequestHeaderValueErrorMessage)...)
+			var actualErrorMessage string
+			if err := allErrs.ToAggregate(); err != nil {
+				actualErrorMessage = err.Error()
 			}
-		}
+			switch {
+			case tc.expectedErrorMessage == "" && actualErrorMessage != "":
+				t.Fatalf("unexpected error: %v", actualErrorMessage)
+			case tc.expectedErrorMessage != "" && actualErrorMessage == "":
+				t.Fatalf("got nil, expected %v", tc.expectedErrorMessage)
+			case tc.expectedErrorMessage != actualErrorMessage:
+				t.Fatalf("unexpected error: %v, expected: %v", actualErrorMessage, tc.expectedErrorMessage)
+			}
+		})
 	}
 }
 

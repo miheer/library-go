@@ -30,12 +30,11 @@ var validateRouteName = apimachineryvalidation.NameIsDNSSubdomain
 // IngressController.spec.httpHeaders.actions[*].request of the Route API
 // for the benefit of client-side validation.
 var (
-	permittedHeaderValueTemplate   = `^(?:%(?:%|(?:\{[-+]?[QXE](?:,[-+]?[QXE])*\})?\[(?:XYZ\.hdr\([0-9A-Za-z-]+\)|ssl_c_der)(?:,(?:lower|base64))*\])|[^%[:cntrl:]])+$`
-	permittedRequestHeaderValueRE  = regexp.MustCompile(strings.Replace(permittedHeaderValueTemplate, "XYZ", "req", 1))
-	permittedResponseHeaderValueRE = regexp.MustCompile(strings.Replace(permittedHeaderValueTemplate, "XYZ", "res", 1))
-	specResponseString             = "spec.httpHeaders.actions.response"
-	specRequestString              = "spec.httpHeaders.actions.request"
-	specTLSTerminationString       = "spec.tls.termination"
+	permittedHeaderValueTemplate             = `^(?:%(?:%|(?:\{[-+]?[QXE](?:,[-+]?[QXE])*\})?\[(?:XYZ\.hdr\([0-9A-Za-z-]+\)|ssl_c_der)(?:,(?:lower|base64))*\])|[^%[:cntrl:]])+$`
+	permittedRequestHeaderValueRE            = regexp.MustCompile(strings.Replace(permittedHeaderValueTemplate, "XYZ", "req", 1))
+	permittedRequestHeaderValueErrorMessage  = "Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are req.hdr, ssl_c_der. Converters allowed are lower, base64."
+	permittedResponseHeaderValueRE           = regexp.MustCompile(strings.Replace(permittedHeaderValueTemplate, "XYZ", "res", 1))
+	permittedResponseHeaderValueErrorMessage = "Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are res.hdr, ssl_c_der. Converters allowed are lower, base64."
 )
 
 func ValidateRoute(route *routev1.Route) field.ErrorList {
@@ -110,26 +109,20 @@ func validateRoute(route *routev1.Route, checkHostname bool) field.ErrorList {
 	if route.Spec.HTTPHeaders != nil {
 		if len(route.Spec.HTTPHeaders.Actions.Response) != 0 || len(route.Spec.HTTPHeaders.Actions.Request) != 0 {
 			if route.Spec.TLS != nil && route.Spec.TLS.Termination == routev1.TLSTerminationPassthrough {
-				specTLS := field.NewPath(specTLSTerminationString)
-				result = append(result, field.NotSupported(specTLS, route.Spec.TLS.Termination, []string{"Only edge and re-encrypt routes are supported for providing customized headers."}))
+				result = append(result, field.Invalid(field.NewPath("spec", "tls", "termination"), route.Spec.TLS.Termination, "only edge and re-encrypt routes are supported for providing customized headers."))
 			}
 		}
+		actionsPath := field.NewPath("spec", "httpHeaders", "actions")
 		if len(route.Spec.HTTPHeaders.Actions.Response) > 20 {
-			result = append(result, field.Invalid(specPath.Child(specResponseString), route.Spec.HTTPHeaders.Actions.Response, "http response headers list can't exceed more than 20 items."))
-		} else if len(route.Spec.HTTPHeaders.Actions.Response) != 0 {
-			specResponse := field.NewPath(specResponseString)
-			if err := validateHeaders(specResponse, route.Spec.HTTPHeaders.Actions.Response); err != nil {
-				result = append(result, err)
-			}
+			result = append(result, field.Invalid(actionsPath.Child("response"), route.Spec.HTTPHeaders.Actions.Response, "response headers list can't exceed 20 items"))
+		} else {
+			result = append(result, validateHeaders(actionsPath.Child("response"), route.Spec.HTTPHeaders.Actions.Response, permittedResponseHeaderValueRE, permittedResponseHeaderValueErrorMessage)...)
 		}
 
 		if len(route.Spec.HTTPHeaders.Actions.Request) > 20 {
-			result = append(result, field.Invalid(specPath.Child(specRequestString), route.Spec.HTTPHeaders.Actions.Request, "http request headers list can't exceed more than 20 items."))
-		} else if len(route.Spec.HTTPHeaders.Actions.Request) != 0 {
-			specRequest := field.NewPath(specRequestString)
-			if err := validateHeaders(specRequest, route.Spec.HTTPHeaders.Actions.Request); err != nil {
-				result = append(result, err)
-			}
+			result = append(result, field.Invalid(actionsPath.Child("request"), route.Spec.HTTPHeaders.Actions.Request, "request headers list can't exceed 20 items"))
+		} else {
+			result = append(result, validateHeaders(actionsPath.Child("request"), route.Spec.HTTPHeaders.Actions.Request, permittedRequestHeaderValueRE, permittedRequestHeaderValueErrorMessage)...)
 		}
 	}
 
@@ -386,50 +379,59 @@ func validateWildcardPolicy(host string, policy routev1.WildcardPolicyType, fldP
 }
 
 var (
-	notAllowedHTTPHeaders   = []string{"strict-transport-security", "proxy", "cookie", "set-cookie"}
-	notAllowedHTTPHeaderSet = sets.NewString(notAllowedHTTPHeaders...)
+	notAllowedHTTPHeaders        = []string{"strict-transport-security", "proxy", "cookie", "set-cookie"}
+	notAllowedHTTPHeaderSet      = sets.NewString(notAllowedHTTPHeaders...)
+	notAllowedHTTPHeadersMessage = fmt.Sprintf("the following headers may not be modified using this API: %v", strings.Join(notAllowedHTTPHeaders, ", "))
 )
 
-func validateHeaders(path *field.Path, headerValues []routev1.RouteHTTPHeader) *field.Error {
-	unique := make(map[string]bool, len(headerValues))
-	us := make([]string, len(unique))
-	for key, value := range headerValues {
-		if len(value.Name) == 0 {
-			return field.Invalid(path.Index(key).Child("name"), value.Name, fmt.Sprintf("name must be present"))
+// validateHeaders verifies that the given slice of request or response headers
+// is valid using the given regexp.
+func validateHeaders(fldPath *field.Path, headers []routev1.RouteHTTPHeader, valueRegexp *regexp.Regexp, valueErrorMessage string) field.ErrorList {
+	allErrs := field.ErrorList{}
+	headersMap := map[string]struct{}{}
+	for i, header := range headers {
+		idxPath := fldPath.Index(i)
+
+		// Each action must specify a unique header.
+		_, alreadyExists := headersMap[header.Name]
+		if alreadyExists {
+			err := field.Duplicate(idxPath.Child("name"), header.Name)
+			allErrs = append(allErrs, err)
+		}
+		headersMap[header.Name] = struct{}{}
+
+		if len(header.Name) == 0 {
+			err := field.Required(idxPath.Child("name"), "")
+			allErrs = append(allErrs, err)
+		}
+		if len(header.Name) > 1024 {
+			err := field.Invalid(idxPath.Child("name"), header.Name, fmt.Sprintf("name exceeds the maximum length, which is 1024"))
+			allErrs = append(allErrs, err)
+		}
+		if notAllowedHTTPHeaderSet.Has(strings.ToLower(header.Name)) {
+			err := field.Forbidden(idxPath.Child("name"), notAllowedHTTPHeadersMessage)
+			allErrs = append(allErrs, err)
 		}
 
-		if !unique[value.Name] {
-			us = append(us, value.Name)
-			unique[value.Name] = true
-		} else {
-			return field.Invalid(path.Index(key).Child("name"), value.Name, fmt.Sprintf("duplicate header name not allowed"))
+		if header.Action.Type == routev1.Set && header.Action.Set == nil {
+			err := field.Required(idxPath.Child("action", "set"), "set is required when type is Set, and forbidden otherwise")
+			allErrs = append(allErrs, err)
 		}
-
-		if value.Action.Set != nil && len(value.Action.Set.Value) > 16384 {
-			return field.Invalid(path.Index(key).Child("action.set.value"), value.Action.Set.Value, fmt.Sprintf("value exceeds the maximum length which is 16384"))
-		}
-		if len(value.Name) > 1024 {
-			return field.Invalid(path.Index(key).Child("name"), value.Name, fmt.Sprintf("name exceeds the maximum length which is 1024"))
-		}
-		if value.Action.Set != nil && len(value.Action.Set.Value) == 0 {
-			return field.Invalid(path.Index(key).Child("action.set.value"), value.Action.Set.Value, fmt.Sprintf("value must be present"))
-		}
-		if path.String() == specResponseString && value.Action.Set != nil && len(value.Action.Set.Value) != 0 {
-			if !permittedResponseHeaderValueRE.MatchString(value.Action.Set.Value) {
-				return field.Invalid(path.Index(key).Child("action.set.value"), value.Name, "Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are res.hdr, ssl_c_der. Converters allowed are lower, base64.")
+		if header.Action.Set != nil {
+			switch valueLength := len(header.Action.Set.Value); {
+			case valueLength == 0:
+				err := field.Required(idxPath.Child("action", "set", "value"), "")
+				allErrs = append(allErrs, err)
+			case valueLength > 1638:
+				err := field.Invalid(idxPath.Child("action", "set", "value"), header.Action.Set.Value, "value exceeds the maximum length, which is 16384")
+				allErrs = append(allErrs, err)
+			case !valueRegexp.MatchString(header.Action.Set.Value):
+				err := field.Invalid(idxPath.Child("action", "set", "value"), header.Action.Set.Value, valueErrorMessage)
+				allErrs = append(allErrs, err)
 			}
-		}
-		if path.String() == specRequestString && value.Action.Set != nil && len(value.Action.Set.Value) != 0 {
-			if !permittedRequestHeaderValueRE.MatchString(value.Action.Set.Value) {
-				return field.Invalid(path.Index(key).Child("action.set.value"), value.Name, "Either header value provided is not in correct format or the converter specified is not allowed. The dynamic header value  may use HAProxy's %[] syntax and otherwise must be a valid HTTP header value as defined in https://datatracker.ietf.org/doc/html/rfc7230#section-3.2 Sample fetchers allowed are req.hdr, ssl_c_der. Converters allowed are lower, base64.")
-			}
-		}
-
-		if notAllowedHTTPHeaderSet.Has(strings.ToLower(value.Name)) {
-			return field.NotSupported(path.Index(key).Child("name"), value.Name, []string{fmt.Sprintf("All headers except %v", strings.Join(notAllowedHTTPHeaders, ","))})
 		}
 	}
-	return nil
+	return allErrs
 }
 
 // The special finalizer name validations were copied from k8s.io/kubernetes to eliminate that
