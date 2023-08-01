@@ -1612,6 +1612,61 @@ func TestValidateHeaders(t *testing.T) {
 			},
 			expectedErrorMessage: `spec.httpHeaders.actions.request[1].name: Duplicate value: "Accept"`,
 		},
+		{
+			name: "set is required when type is Set",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "missing-set-field",
+					Namespace: "foo",
+				},
+				Spec: routev1.RouteSpec{
+					Host:           "subdomain.example.test",
+					To:             createRouteSpecTo("serviceName", "Service"),
+					HTTPHeaders: &routev1.RouteHTTPHeaders{
+						Actions: routev1.RouteHTTPHeaderActions{
+							Request: []routev1.RouteHTTPHeader{
+								{
+									Name: "Accept",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Set,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedErrorMessage: `spec.httpHeaders.actions.request[0].action.set: Required value: set is required when type is Set, and forbidden otherwise`,
+		},
+		{
+			name: "set is forbidden when type is not Set",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "missing-set-field",
+					Namespace: "foo",
+				},
+				Spec: routev1.RouteSpec{
+					Host:           "subdomain.example.test",
+					To:             createRouteSpecTo("serviceName", "Service"),
+					HTTPHeaders: &routev1.RouteHTTPHeaders{
+						Actions: routev1.RouteHTTPHeaderActions{
+							Request: []routev1.RouteHTTPHeader{
+								{
+									Name: "Accept",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Delete,
+										Set: &routev1.RouteSetHTTPHeader{
+											Value: "text/plain,text/html",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedErrorMessage: `spec.httpHeaders.actions.request[0].action.set: Required value: set is required when type is Set, and forbidden otherwise`,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
