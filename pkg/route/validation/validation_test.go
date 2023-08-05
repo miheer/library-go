@@ -978,7 +978,9 @@ func TestValidateRoute(t *testing.T) {
 	}
 }
 
-// This unit test tests if the Actions to set/delete headers were passed correctly in the Route Spec and checks if an appropriate error message was provided.
+// TestValidateHeaders verifies that validateHeaders correctly validates
+// response and request header actions in the route spec and returns the
+// appropriate error messages.
 func TestValidateHeaders(t *testing.T) {
 	var (
 		tooLargeName  = strings.Repeat("x", 1025)
@@ -1454,7 +1456,7 @@ func TestValidateHeaders(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorMessage: "spec.httpHeaders.actions.response[0].action.set.value: Required value: X-SSL-Client-Cert's value must be provided",
+			expectedErrorMessage: "spec.httpHeaders.actions.response[0].action.set.value: Required value",
 		},
 		{
 			name: "should give an error if the header name exceeds 1024 chars",
@@ -1668,6 +1670,32 @@ func TestValidateHeaders(t *testing.T) {
 			expectedErrorMessage: `spec.httpHeaders.actions.request[0].action.set: Required value: set is required when type is Set, and forbidden otherwise`,
 		},
 		{
+			name: "empty header name",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "empty-name",
+					Namespace: "foo",
+				},
+				Spec: routev1.RouteSpec{
+					Host: "subdomain.example.test",
+					To:   createRouteSpecTo("serviceName", "Service"),
+					HTTPHeaders: &routev1.RouteHTTPHeaders{
+						Actions: routev1.RouteHTTPHeaderActions{
+							Request: []routev1.RouteHTTPHeader{
+								{
+									Name: "",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: routev1.Delete,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedErrorMessage: "spec.httpHeaders.actions.request[0].name: Required value",
+		},
+		{
 			name: "invalid header name",
 			route: &routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1692,6 +1720,32 @@ func TestValidateHeaders(t *testing.T) {
 				},
 			},
 			expectedErrorMessage: `spec.httpHeaders.actions.request[0].name: Invalid value: "foo bar": name must be a valid HTTP header name as defined in RFC 2616 section 4.2`,
+		},
+		{
+			name: "empty action",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "empty-action",
+					Namespace: "foo",
+				},
+				Spec: routev1.RouteSpec{
+					Host: "subdomain.example.test",
+					To:   createRouteSpecTo("serviceName", "Service"),
+					HTTPHeaders: &routev1.RouteHTTPHeaders{
+						Actions: routev1.RouteHTTPHeaderActions{
+							Request: []routev1.RouteHTTPHeader{
+								{
+									Name: "x-foo",
+									Action: routev1.RouteHTTPHeaderActionUnion{
+										Type: "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedErrorMessage: `spec.httpHeaders.actions.request[0].action.type: Invalid value: "": type must be "Set" or "Delete"`,
 		},
 		{
 			name: "invalid action",
@@ -1723,8 +1777,8 @@ func TestValidateHeaders(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var allErrs field.ErrorList
-			allErrs = append(allErrs, validateHeaders(field.NewPath("spec", "httpHeaders", "actions", "response"), tc.route.Spec.HTTPHeaders.Actions.Response, permittedHeaderNameRE, permittedHeaderNameErrorMessage, permittedResponseHeaderValueRE, permittedResponseHeaderValueErrorMessage)...)
-			allErrs = append(allErrs, validateHeaders(field.NewPath("spec", "httpHeaders", "actions", "request"), tc.route.Spec.HTTPHeaders.Actions.Request, permittedHeaderNameRE, permittedHeaderNameErrorMessage, permittedRequestHeaderValueRE, permittedRequestHeaderValueErrorMessage)...)
+			allErrs = append(allErrs, validateHeaders(field.NewPath("spec", "httpHeaders", "actions", "response"), tc.route.Spec.HTTPHeaders.Actions.Response, permittedResponseHeaderValueRE, permittedResponseHeaderValueErrorMessage)...)
+			allErrs = append(allErrs, validateHeaders(field.NewPath("spec", "httpHeaders", "actions", "request"), tc.route.Spec.HTTPHeaders.Actions.Request, permittedRequestHeaderValueRE, permittedRequestHeaderValueErrorMessage)...)
 			var actualErrorMessage string
 			if err := allErrs.ToAggregate(); err != nil {
 				actualErrorMessage = err.Error()
@@ -1937,7 +1991,7 @@ func TestValidatePassthroughInsecureEdgeTerminationPolicy(t *testing.T) {
 	}
 }
 
-// TestValidateRouteBad ensures not specifying a required field results in error and a fully specified
+// TestValidateRouteUpdate ensures not specifying a required field results in error and a fully specified
 // route passes successfully
 func TestValidateRouteUpdate(t *testing.T) {
 	tests := []struct {
